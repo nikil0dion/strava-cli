@@ -75,19 +75,52 @@ func (c *Client) GetAthlete() (*Athlete, error) {
 	return &athlete, nil
 }
 
-type Activity struct {
-	ID               int64   `json:"id"`
-	Name             string  `json:"name"`
-	Type             string  `json:"type"`
+type Gear struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Distance float64 `json:"distance"`
+	Primary  bool    `json:"primary"`
+}
+
+type BestEffort struct {
+	Name        string `json:"name"`
+	Distance    float64 `json:"distance"`
+	ElapsedTime int    `json:"elapsed_time"`
+	MovingTime  int    `json:"moving_time"`
+	PRRank      *int   `json:"pr_rank"`
+}
+
+type Split struct {
+	Split            int     `json:"split"`
 	Distance         float64 `json:"distance"`
 	MovingTime       int     `json:"moving_time"`
-	ElapsedTime      int     `json:"elapsed_time"`
-	TotalElevationGain float64 `json:"total_elevation_gain"`
-	StartDate        string  `json:"start_date"`
 	AverageSpeed     float64 `json:"average_speed"`
-	MaxSpeed         float64 `json:"max_speed"`
 	AverageHeartrate float64 `json:"average_heartrate"`
-	MaxHeartrate     float64 `json:"max_heartrate"`
+}
+
+type Activity struct {
+	ID                 int64        `json:"id"`
+	Name               string       `json:"name"`
+	Type               string       `json:"type"`
+	SportType          string       `json:"sport_type"`
+	Distance           float64      `json:"distance"`
+	MovingTime         int          `json:"moving_time"`
+	ElapsedTime        int          `json:"elapsed_time"`
+	TotalElevationGain float64      `json:"total_elevation_gain"`
+	StartDate          string       `json:"start_date"`
+	StartDateLocal     string       `json:"start_date_local"`
+	AverageSpeed       float64      `json:"average_speed"`
+	MaxSpeed           float64      `json:"max_speed"`
+	AverageHeartrate   float64      `json:"average_heartrate"`
+	MaxHeartrate       float64      `json:"max_heartrate"`
+	AverageCadence     float64      `json:"average_cadence"`
+	Calories           float64      `json:"calories"`
+	SufferScore        float64      `json:"suffer_score"`
+	Description        string       `json:"description"`
+	PRCount            int          `json:"pr_count"`
+	Gear               *Gear        `json:"gear"`
+	BestEfforts        []BestEffort `json:"best_efforts"`
+	SplitsMetric       []Split      `json:"splits_metric"`
 }
 
 func (c *Client) GetActivities(perPage, page int) ([]Activity, error) {
@@ -139,7 +172,7 @@ type Stats struct {
 
 func (c *Client) GetStats(athleteID int64) (*Stats, error) {
 	endpoint := fmt.Sprintf("/athletes/%d/stats", athleteID)
-	
+
 	data, err := c.get(endpoint)
 	if err != nil {
 		return nil, err
@@ -151,4 +184,80 @@ func (c *Client) GetStats(athleteID int64) (*Stats, error) {
 	}
 
 	return &stats, nil
+}
+
+// GetActivity returns detailed info for a single activity
+func (c *Client) GetActivity(activityID int64) (*Activity, error) {
+	endpoint := fmt.Sprintf("/activities/%d", activityID)
+
+	data, err := c.get(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var activity Activity
+	if err := json.Unmarshal(data, &activity); err != nil {
+		return nil, fmt.Errorf("failed to parse activity: %w", err)
+	}
+
+	return &activity, nil
+}
+
+// HR Zones types
+type ZoneBucket struct {
+	Min  float64 `json:"min"`
+	Max  float64 `json:"max"`
+	Time float64 `json:"time"`
+}
+
+type ZoneDistribution struct {
+	Type    string       `json:"type"`
+	Buckets []ZoneBucket `json:"distribution_buckets"`
+}
+
+// GetZones returns HR zones for an activity
+func (c *Client) GetZones(activityID int64) ([]ZoneDistribution, error) {
+	endpoint := fmt.Sprintf("/activities/%d/zones", activityID)
+
+	data, err := c.get(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var zones []ZoneDistribution
+	if err := json.Unmarshal(data, &zones); err != nil {
+		return nil, fmt.Errorf("failed to parse zones: %w", err)
+	}
+
+	return zones, nil
+}
+
+// Laps/Splits
+type Lap struct {
+	Name             string  `json:"name"`
+	Distance         float64 `json:"distance"`
+	MovingTime       int     `json:"moving_time"`
+	ElapsedTime      int     `json:"elapsed_time"`
+	AverageSpeed     float64 `json:"average_speed"`
+	AverageHeartrate float64 `json:"average_heartrate"`
+	MaxHeartrate     float64 `json:"max_heartrate"`
+	LapIndex         int     `json:"lap_index"`
+	PaceZone         int     `json:"pace_zone"`
+}
+
+// GetLaps returns splits/laps for an activity
+func (c *Client) GetLaps(activityID int64) ([]Lap, error) {
+	endpoint := fmt.Sprintf("/activities/%d/laps", activityID)
+
+	data, err := c.get(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	var laps []Lap
+	if err := json.Unmarshal(data, &laps); err != nil {
+		return nil, fmt.Errorf("failed to parse laps: %w", err)
+	}
+
+	return laps, nil
 }

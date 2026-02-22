@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/nikilodion/strava-cli/internal/api"
 	"github.com/nikilodion/strava-cli/internal/auth"
@@ -23,6 +24,12 @@ func main() {
 		cmdProfile()
 	case "activities":
 		cmdActivities()
+	case "activity":
+		cmdActivity()
+	case "zones":
+		cmdZones()
+	case "laps":
+		cmdLaps()
 	case "stats":
 		cmdStats()
 	case "help", "-h", "--help":
@@ -139,6 +146,179 @@ func cmdStats() {
 	fmt.Printf("  Time:       %.1f hours\n", stats.RecentRideTotals.MovingTime/3600)
 }
 
+func cmdActivity() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: strava-cli activity <activity_id>")
+		os.Exit(1)
+	}
+
+	activityID, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid activity ID: %s\n", os.Args[2])
+		os.Exit(1)
+	}
+
+	client := getClient()
+
+	activity, err := client.GetActivity(activityID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching activity: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("🏃 %s (%s)\n", activity.Name, activity.Type)
+	fmt.Printf("📅 %s\n\n", activity.StartDateLocal)
+
+	fmt.Printf("📊 STATS\n")
+	fmt.Printf("• Distance: %.2f km\n", activity.Distance/1000)
+	fmt.Printf("• Time: %d:%02d\n", activity.MovingTime/60, activity.MovingTime%60)
+	if activity.AverageSpeed > 0 && activity.Type == "Run" {
+		pace := 1000 / activity.AverageSpeed / 60
+		paceMin := int(pace)
+		paceSec := int((pace - float64(paceMin)) * 60)
+		fmt.Printf("• Pace: %d:%02d /km\n", paceMin, paceSec)
+	}
+	if activity.TotalElevationGain > 0 {
+		fmt.Printf("• Elevation: +%.0f m\n", activity.TotalElevationGain)
+	}
+
+	if activity.AverageHeartrate > 0 {
+		fmt.Printf("\n❤️ HEART RATE\n")
+		fmt.Printf("• Avg: %.0f bpm\n", activity.AverageHeartrate)
+		fmt.Printf("• Max: %.0f bpm\n", activity.MaxHeartrate)
+	}
+	if activity.AverageCadence > 0 {
+		fmt.Printf("• Cadence: %.0f spm\n", activity.AverageCadence*2)
+	}
+
+	if activity.Calories > 0 || activity.SufferScore > 0 {
+		fmt.Println()
+		if activity.Calories > 0 {
+			fmt.Printf("🔥 Calories: %.0f kcal\n", activity.Calories)
+		}
+		if activity.SufferScore > 0 {
+			fmt.Printf("💪 Suffer Score: %.0f\n", activity.SufferScore)
+		}
+	}
+
+	// Gear
+	if activity.Gear != nil && activity.Gear.Name != "" {
+		fmt.Printf("\n👟 Gear: %s (%.0f km total)\n", activity.Gear.Name, activity.Gear.Distance/1000)
+	}
+
+	// Best Efforts
+	if len(activity.BestEfforts) > 0 {
+		fmt.Printf("\n🏆 BEST EFFORTS\n")
+		for _, be := range activity.BestEfforts {
+			mins := be.MovingTime / 60
+			secs := be.MovingTime % 60
+			prText := ""
+			if be.PRRank != nil && *be.PRRank > 0 {
+				prText = fmt.Sprintf(" (PR #%d)", *be.PRRank)
+			}
+			fmt.Printf("• %s: %d:%02d%s\n", be.Name, mins, secs, prText)
+		}
+	}
+
+	// Splits
+	if len(activity.SplitsMetric) > 1 {
+		fmt.Printf("\n📏 SPLITS\n")
+		for _, s := range activity.SplitsMetric {
+			if s.Distance < 500 {
+				continue // skip partial km
+			}
+			pace := 0.0
+			if s.AverageSpeed > 0 {
+				pace = 1000 / s.AverageSpeed / 60
+			}
+			paceMin := int(pace)
+			paceSec := int((pace - float64(paceMin)) * 60)
+			hrText := ""
+			if s.AverageHeartrate > 0 {
+				hrText = fmt.Sprintf(" | %.0f bpm", s.AverageHeartrate)
+			}
+			fmt.Printf("• Km %d: %d:%02d%s\n", s.Split, paceMin, paceSec, hrText)
+		}
+	}
+}
+
+func cmdZones() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: strava-cli zones <activity_id>")
+		os.Exit(1)
+	}
+
+	activityID, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid activity ID: %s\n", os.Args[2])
+		os.Exit(1)
+	}
+
+	client := getClient()
+
+	zones, err := client.GetZones(activityID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching zones: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, z := range zones {
+		if z.Type == "heartrate" {
+			fmt.Printf("❤️ HR ZONES\n\n")
+			var totalTime float64
+			for _, b := range z.Buckets {
+				totalTime += b.Time
+			}
+			for i, b := range z.Buckets {
+				pct := 0.0
+				if totalTime > 0 {
+					pct = b.Time / totalTime * 100
+				}
+				mins := int(b.Time / 60)
+				secs := int(b.Time) % 60
+				maxStr := fmt.Sprintf("%.0f", b.Max)
+				if b.Max < 0 {
+					maxStr = "max"
+				}
+				fmt.Printf("Zone %d (%.0f-%s bpm): %d:%02d (%.0f%%)\n", i+1, b.Min, maxStr, mins, secs, pct)
+			}
+		}
+	}
+}
+
+func cmdLaps() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: strava-cli laps <activity_id>")
+		os.Exit(1)
+	}
+
+	activityID, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid activity ID: %s\n", os.Args[2])
+		os.Exit(1)
+	}
+
+	client := getClient()
+
+	laps, err := client.GetLaps(activityID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching laps: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("📏 SPLITS\n\n")
+	for _, lap := range laps {
+		pace := 0.0
+		if lap.AverageSpeed > 0 {
+			pace = 1000 / lap.AverageSpeed / 60
+		}
+		paceMin := int(pace)
+		paceSec := int((pace - float64(paceMin)) * 60)
+		fmt.Printf("%d. %.2f km | %d:%02d /km | %.0f bpm\n",
+			lap.LapIndex, lap.Distance/1000, paceMin, paceSec, lap.AverageHeartrate)
+	}
+}
+
 func printUsage() {
 	fmt.Println(`strava-cli - Strava API command-line tool
 
@@ -146,10 +326,13 @@ Usage:
   strava-cli <command> [options]
 
 Commands:
-  profile       Show athlete profile
-  activities    List recent activities
-  stats         Show athlete statistics
-  help          Show this help message
+  profile           Show athlete profile
+  activities        List recent activities
+  activity <id>     Show activity details
+  zones <id>        Show HR zones for activity
+  laps <id>         Show splits/laps for activity
+  stats             Show athlete statistics
+  help              Show this help message
 
 Options:
   activities:
@@ -158,5 +341,8 @@ Options:
 Examples:
   strava-cli profile
   strava-cli activities --limit 20
+  strava-cli activity 17462649839
+  strava-cli zones 17462649839
+  strava-cli laps 17462649839
   strava-cli stats`)
 }
