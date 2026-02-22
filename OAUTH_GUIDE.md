@@ -2,28 +2,31 @@
 
 ## Why You Need This
 
-By default, Strava only gives `read` scope (athlete profile).  
-To read activities you need `activity:read` scope.
+By default, Strava only gives `read` scope (athlete profile).
+To read activities, HR zones, best efforts, gear — you need `activity:read_all` scope.
 
 ## How to Get Full Access
 
 ### 1. Build OAuth URL
 
 ```
-https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost/callback&approval_prompt=force&scope=read,activity:read
+https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost&approval_prompt=force&scope=read,activity:read_all
 ```
 
 **Parameters:**
 - `client_id` - your Client ID (from strava.com/settings/api)
-- `redirect_uri` - must match your app settings
-- `scope` - requested permissions (comma-separated)
+- `redirect_uri` - must match your app settings (use `http://localhost`)
+- `scope` - requested permissions: `read,activity:read_all`
+- `approval_prompt=force` - always show consent screen
 
 ### 2. Open in Browser
 
-Browser redirects to:
+Authorize and browser redirects to:
 ```
-http://localhost/callback?state=&code=AUTHORIZATION_CODE&scope=read,activity:read
+http://localhost/?state=&code=AUTHORIZATION_CODE&scope=read,activity:read_all
 ```
+
+Copy the `code` value from URL.
 
 ### 3. Exchange Code for Tokens
 
@@ -41,8 +44,8 @@ curl -X POST https://www.strava.com/oauth/token \
   "token_type": "Bearer",
   "expires_at": 1629387600,
   "expires_in": 21600,
-  "refresh_token": "new_refresh_token",
-  "access_token": "new_access_token",
+  "refresh_token": "your_refresh_token",
+  "access_token": "your_access_token",
   "athlete": {...}
 }
 ```
@@ -50,36 +53,48 @@ curl -X POST https://www.strava.com/oauth/token \
 ### 4. Update credentials.json
 
 ```bash
+mkdir -p ~/.config/strava-cli
 nano ~/.config/strava-cli/credentials.json
 ```
 
-Replace `access_token`, `refresh_token`, `token_expires_at`, `scope`.
+```json
+{
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "access_token": "your_access_token",
+  "refresh_token": "your_refresh_token",
+  "token_expires_at": "2026-02-22T20:00:00Z",
+  "scope": "read,activity:read_all"
+}
+```
+
+Note: `token_expires_at` — convert `expires_at` unix timestamp to ISO format.
 
 ## Available Scopes
 
-- `read` - public profile
-- `read_all` - full profile (including private data)
-- `profile:read_all` - detailed profile
-- `profile:write` - update profile
-- `activity:read` - read activities ✅
-- `activity:read_all` - read all activities (including private)
-- `activity:write` - create/update activities
+| Scope | Description |
+|-------|-------------|
+| `read` | Public profile |
+| `read_all` | Full profile (including private) |
+| `activity:read` | Read public activities |
+| `activity:read_all` | Read all activities (including private) ✅ |
+| `activity:write` | Create/update activities |
 
-## Quick Fix for `activity:read`
+**Recommended:** `read,activity:read_all`
 
-If you don't want to run the full OAuth flow:
+## Token Refresh
 
-1. Go to https://www.strava.com/settings/api
-2. In "Your Access Token" section, click "Regenerate"
-3. **Important:** Strava will generate a new token, but scope will remain `read`
-4. For full access you still need OAuth flow
+Access tokens expire every 6 hours. The CLI automatically refreshes using `refresh_token`.
 
-## Automatic OAuth (TODO)
+No manual action needed after initial setup.
 
-Planned to be built into CLI:
-```bash
-strava-cli auth --scope read,activity:read
-# Opens browser, gets code, exchanges for tokens, saves
-```
+## Troubleshooting
 
-For now, follow the manual instructions above.
+**Error: "Authorization Error - activity:read_permission"**
+- Your token has wrong scope
+- Re-run OAuth flow with `scope=read,activity:read_all`
+
+**Error: "401 Unauthorized"**
+- Token expired and refresh failed
+- Check `client_secret` is correct
+- Re-run OAuth flow
