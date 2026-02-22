@@ -15,7 +15,7 @@ Minimalist CLI for Strava API v3 built with Go 1.25+
 
 ```bash
 # Build from source
-go build -o strava-cli ./cmd/strava-cli
+go build -ldflags="-w -s" -trimpath -o strava-cli ./cmd/strava-cli
 
 # Or install to $GOPATH/bin
 go install ./cmd/strava-cli
