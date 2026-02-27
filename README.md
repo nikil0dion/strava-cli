@@ -26,7 +26,23 @@ sudo mv strava-cli /usr/local/bin/
 
 ## Configuration
 
-Credentials stored in `~/.config/strava-cli/credentials.json`:
+### Environment Variables (Recommended)
+
+```bash
+export STRAVA_ACCESS_TOKEN="your_access_token"
+
+# Optional (required for auto-refresh):
+export STRAVA_CLIENT_ID="your_client_id"
+export STRAVA_CLIENT_SECRET="your_client_secret"
+export STRAVA_REFRESH_TOKEN="your_refresh_token"
+export STRAVA_TOKEN_EXPIRES_AT="1740268140"  # Unix timestamp
+```
+
+When using env vars, refreshed tokens are printed to stderr for updating your environment.
+
+### Config File (Fallback)
+
+If env vars are not set, falls back to `~/.config/strava-cli/credentials.json`:
 
 ```json
 {
@@ -43,7 +59,7 @@ Credentials stored in `~/.config/strava-cli/credentials.json`:
 
 1. Create app at https://www.strava.com/settings/api
 2. Authorize with correct scope (see `OAUTH_GUIDE.md`)
-3. Save credentials to config file
+3. Set environment variables or save to config file
 
 ## Commands
 

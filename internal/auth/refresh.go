@@ -59,6 +59,9 @@ func RefreshToken(creds *config.Credentials) error {
 
 func EnsureValidToken(creds *config.Credentials) error {
 	if creds.IsExpired() {
+		if !creds.CanRefresh() {
+			return fmt.Errorf("token expired and cannot refresh (missing client_id, client_secret, or refresh_token)")
+		}
 		fmt.Println("Token expired, refreshing...")
 		return RefreshToken(creds)
 	}
